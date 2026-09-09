@@ -46,13 +46,20 @@ export PATH="/tmp/kotlinc/bin:$PATH"
 Then run it against any repo:
 
 ```bash
-kotlin scan-repo.main.kts /path/to/some/repo /path/to/some/repo/README.md
+kotlin scan-repo.main.kts /path/to/some/repo
+```
+
+That's it — it updates `README.md` at the root of that repo, creating one if it
+doesn't exist yet. Pass a second argument if you want to write somewhere else instead:
+
+```bash
+kotlin scan-repo.main.kts /path/to/some/repo /path/to/some/repo/docs/OVERVIEW.md
 ```
 
 Run it again with `GITHUB_ACTIONS=true` set to preview the CI annotation format:
 
 ```bash
-GITHUB_ACTIONS=true kotlin scan-repo.main.kts . README.md
+GITHUB_ACTIONS=true kotlin scan-repo.main.kts .
 ```
 
 ## Using it as a GitHub Action

@@ -8,6 +8,13 @@ tagged release.
 
 ## [Unreleased]
 
+### Changed
+- The README path argument is now optional. `kotlin scan-repo.main.kts <repo>` alone
+  now creates or updates `<repo>/README.md`. Previously the default `"README.md"` was
+  resolved against the current working directory rather than the repo root, so running
+  from anywhere other than the repo itself silently wrote (or looked for) the README
+  in the wrong place. An explicit second argument still works exactly as before.
+
 ### Planned
 - Naming-convention and `!!`-usage lint rules
 - Swap regex parsing for a real parser (`kotlinx-ast` or compiler PSI) to remove the

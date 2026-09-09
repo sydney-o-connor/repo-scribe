@@ -186,7 +186,7 @@ fun scanFile(file: File): FileReport {
 // ---------- main ----------
 
 val repoRoot = File(args.getOrElse(0) { "." })
-val readmePath = File(args.getOrElse(1) { "README.md" })
+val readmePath = args.getOrNull(1)?.let { File(it) } ?: File(repoRoot, "README.md")
 val isCi = System.getenv("GITHUB_ACTIONS") == "true"
 
 val kotlinFiles = repoRoot.walkTopDown()
