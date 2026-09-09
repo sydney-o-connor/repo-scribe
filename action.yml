@@ -1,0 +1,28 @@
+name: "repo-scribe"
+description: "Scans a Kotlin repo, generates a README overview section, and flags undocumented public API + TODO/FIXME as PR annotations."
+author: "you"
+
+inputs:
+  repo-root:
+    description: "Path to scan, relative to the repo root."
+    required: false
+    default: "."
+  readme-path:
+    description: "Path to the README file to update."
+    required: false
+    default: "README.md"
+
+outputs:
+  doc-coverage-percent:
+    description: "Percent of public declarations with a KDoc comment."
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
+  args:
+    - ${{ inputs.repo-root }}
+    - ${{ inputs.readme-path }}
+
+branding:
+  icon: "book-open"
+  color: "purple"
