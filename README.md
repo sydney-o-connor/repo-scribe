@@ -8,17 +8,27 @@ It's built as a single [Kotlin script](https://kotlinlang.org/docs/custom-script
 (`scan-repo.main.kts`) with no external dependencies, wrapped in a Docker-based
 GitHub Action — no Gradle project, no build step, just a script that runs top to bottom.
 
+See [CHANGELOG.md](./CHANGELOG.md) for what's changed between versions.
+
 ## What it does
 
 1. Walks the repo looking for `.kt`/`.kts` files
-2. For each file, extracts top-level `class`/`interface`/`object`/`fun` declarations
-   (skipping `private`/`internal`) and checks whether each has a preceding `/** ... */` block
-3. Collects `// TODO` and `// FIXME` comments
-4. Writes a machine-readable `repo-scribe-report.json`
-5. Injects a generated Markdown section into `README.md`, bounded by
-   `<!-- REPO-SCRIBE:START -->` / `<!-- REPO-SCRIBE:END -->` markers (safe to re-run —
-   it replaces the section in place rather than duplicating it)
-6. In CI, emits `::warning::` / `::notice::` [workflow command annotations](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions)
+2. Parses `class`/`interface`/`object`/`fun`/`val`/`var` declarations (skipping
+   `private`/`internal`), using a brace-and-paren-depth stack to correctly attribute
+   **nested members** to their enclosing class — including nested types like companion
+   objects, which are matched by a unique key rather than by name (so two classes that
+   each have a `Companion` object don't get merged)
+3. Extracts real signatures — parameter lists, return types, property types, and
+   superclass/interface lists (`class Rectangle(...) : Shape`)
+4. Pulls the first line of each declaration's KDoc block as a summary, instead of just
+   a documented/undocumented flag
+5. Collects `// TODO` and `// FIXME` comments
+6. Writes a machine-readable `repo-scribe-report.json`
+7. Injects a generated Markdown section into `README.md` — a real narrative per
+   package: types, their inherited interfaces, their KDoc summaries, and their member
+   signatures, nested recursively — bounded by `<!-- REPO-SCRIBE:START -->` /
+   `<!-- REPO-SCRIBE:END -->` markers (safe to re-run — replaces the section in place)
+8. In CI, emits `::warning::` / `::notice::` [workflow command annotations](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions)
    so undocumented public API and TODOs show up inline on the PR "Files changed" tab
 
 ## Try it locally
@@ -64,28 +74,43 @@ action end-to-end.
 
 ## Design notes / why it's built this way
 
-- **No dependencies at runtime.** Regex + `java.io.File` instead of a real Kotlin parser
-  or `kotlinx.serialization`. This keeps the Docker image small and avoids Maven
-  dependency resolution slowing down every CI run. See "Next steps" below for how to
-  outgrow this deliberately.
-- **Top-level declarations only.** Nested/member declarations (methods inside a class)
-  are skipped for now — regex-parsing indentation-sensitive nested Kotlin is a fast way
-  to write bugs. A real parser (see below) removes this limitation properly.
+- **No dependencies at runtime.** Regex + `java.io.File`, not a real Kotlin parser or
+  `kotlinx.serialization`. Keeps the Docker image small and avoids Maven dependency
+  resolution slowing down every CI run. See "Next steps" for outgrowing this.
+- **Brace/paren-depth tracking, not indentation.** A small stack tracks which
+  class/interface/object body each line is inside, so member functions and properties
+  get attributed to the right owner even when nested (companion objects, inner
+  classes). Declarations are matched by a unique `path:line` key internally, not by
+  name — so two unrelated classes each having a `Companion` object don't collide.
 - **Idempotent README injection.** Marker comments mean re-running the action on every
   PR updates the same section instead of appending duplicates forever.
+
+### Known limitations (regex parsing has real edges)
+
+- **Multi-line signatures aren't parsed.** A function or class header that spans
+  several lines (long parameter lists broken across lines) won't have its signature
+  captured correctly — the paren-depth tracker prevents it from being *misread* as
+  something else, but it also won't be read as a full declaration. Single-line
+  constructor calls and signatures work fine.
+- **Nested generics can confuse the type regex** — `<T : List<String>>` has two `>`
+  characters, and the regex only strips one level of `<...>`. Shallow generics
+  (`List<Shape>`, `Box<T>`) are fine.
+- **Brace counting is naive.** A `{` or `}` inside a string literal or comment would
+  throw off the depth tracker. Rare in practice, but it's a real gap versus a proper
+  parser.
 
 ## Next steps (this is where the "learning Kotlin scripting" part continues)
 
 1. **Add a real dependency.** Swap the hand-rolled JSON writer for
    `kotlinx.serialization`, using `main-kts`'s `@file:DependsOn(...)` to pull it in at
    script-run time. This is the main new mental model versus regular Gradle-built Kotlin.
-2. **Parse instead of regex.** Look at [`kotlinx-ast`](https://github.com/kotlinx/ast) or
-   the compiler's own PSI to correctly find nested declarations, constructors, and
-   properties — the regex approach will always have edge cases (multi-line signatures,
-   declarations inside `companion object`, etc).
+2. **Swap regex for a real parser.** This is the fix for every limitation listed above
+   at once. Look at [`kotlinx-ast`](https://github.com/kotlinx/ast), or use the Kotlin
+   compiler's own embeddable PSI classes (already sitting in `kotlin-compiler.jar`
+   inside any `kotlinc` distribution) to get a real syntax tree instead of line-by-line
+   guessing.
 3. **More lint rules.** Naming conventions, file length, `!!` usage count, unused
    imports — anything a first pass through a codebase should catch.
 4. **Publish to the Marketplace.** Tag a release, add a `branding` icon (already
    scaffolded in `action.yml`), and it's installable by anyone via
    `uses: your-org/repo-scribe@v1`.
-   
